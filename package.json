@@ -1,0 +1,21 @@
+{
+  "name": "tokensheath",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local agent credential broker. The model never sees the key.",
+  "bin": {
+    "sheath": "./bin/sheath.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "sheath": "node bin/sheath.mjs",
+    "test": "node --experimental-strip-types --test src/broker/*.test.ts src/cli/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.1.5"
+  }
+}
