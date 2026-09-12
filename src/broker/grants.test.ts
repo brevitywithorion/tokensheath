@@ -93,6 +93,7 @@ test("session grant on static GET does not cover POST", () => {
     method: "GET",
     origin: get.origin,
     fingerprint: get.fingerprint,
+    pathPrefix: get.path,
   });
   const post = intent({
     tool: "static.request",
@@ -120,6 +121,7 @@ test("session grant is origin-bound", () => {
     method: "GET",
     origin: stripe.origin,
     fingerprint: stripe.fingerprint,
+    pathPrefix: stripe.path,
   });
   const foreign = intent({
     tool: "static.request",
@@ -201,4 +203,36 @@ test("revoke --all makes existing grants unusable", () => {
   g.revokeAll();
   assert.equal(g.find("s1", i), undefined);
   assert.equal(g.activeCount(), 0);
+});
+
+test("session grant path prefix does not cover a sibling path", () => {
+  const g = new GrantStore();
+  const balance = intent({
+    tool: "static.request",
+    method: "GET",
+    url: "https://api.stripe.com/v1/balance",
+  });
+  g.create({
+    sessionId: "s1",
+    credId: "c1",
+    tool: "static.request",
+    mode: "session",
+    method: "GET",
+    origin: balance.origin,
+    fingerprint: balance.fingerprint,
+    pathPrefix: balance.path,
+  });
+  const charges = intent({
+    tool: "static.request",
+    method: "GET",
+    url: "https://api.stripe.com/v1/charges",
+  });
+  const nested = intent({
+    tool: "static.request",
+    method: "GET",
+    url: "https://api.stripe.com/v1/balance/history",
+  });
+  assert.ok(g.find("s1", balance));
+  assert.ok(g.find("s1", nested));
+  assert.equal(g.find("s1", charges), undefined);
 });

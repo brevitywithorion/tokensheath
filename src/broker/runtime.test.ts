@@ -147,3 +147,16 @@ test("named service is required when two keys are saved", async () => {
   assert.equal(byName.ok, true);
   assert.equal(consents, 1);
 });
+
+test("session read is limited to the approved path prefix", async () => {
+  let consents = 0;
+  const { runtime } = setup(() => {
+    consents += 1;
+    return "allow_session";
+  });
+  const a = await runtime.invoke("static.request", { method: "GET", path: "/v1/balance" });
+  const b = await runtime.invoke("static.request", { method: "GET", path: "/v1/charges" });
+  assert.equal(a.ok, true);
+  assert.equal(b.ok, true);
+  assert.equal(consents, 2);
+});

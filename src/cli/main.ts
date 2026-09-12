@@ -55,7 +55,7 @@ async function onboard(): Promise<void> {
   const baseRaw = (await prompt("Base URL [https://jsonplaceholder.typicode.com]: ")) || "https://jsonplaceholder.typicode.com";
   const baseNorm = normalizeBaseUrl(baseRaw);
   if (!baseNorm.ok) {
-    process.stderr.write(`${baseNorm.message} Use a full URL like https://jsonplaceholder.typicode.com\n`);
+    process.stderr.write(`${baseNorm.message} Use a full https URL, or allow local/dev for http/private.\n`);
     process.exit(1);
   }
   const base = baseNorm.url.origin;
@@ -67,6 +67,13 @@ async function onboard(): Promise<void> {
     process.exit(1);
   }
   const store = await loadDiskStore();
+  if (store.staticKey(nickname)) {
+    const ok = (await prompt(`Replace existing "${nickname}"? [n] `)).toLowerCase();
+    if (ok !== "y" && ok !== "yes") {
+      process.stderr.write("Not replaced.\n");
+      process.exit(1);
+    }
+  }
   store.upsertStatic({
     nickname,
     header_name: header,

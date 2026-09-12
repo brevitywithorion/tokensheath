@@ -2,6 +2,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { CONSENT_TIMEOUT_MS, sessionGrantLabel, type ConsentChoice, type ConsentRequest } from "../broker/types.ts";
 import { shortFingerprint } from "../broker/policy.ts";
+import { allowLocalPost, isLoopbackHostHeader } from "../broker/loopback.ts";
 import { openUrl } from "./open-url.ts";
 
 function escapeHtml(s: string): string {
@@ -105,7 +106,7 @@ export function requestConsentBrowser(req: ConsentRequest, agentHint = "MCP clie
     };
     const server = http.createServer((incoming, res) => {
       const host = incoming.headers.host ?? "";
-      if (!host.startsWith("127.0.0.1") && !host.startsWith("localhost")) {
+      if (!isLoopbackHostHeader(host)) {
         res.writeHead(403);
         res.end();
         return;
@@ -117,6 +118,19 @@ export function requestConsentBrowser(req: ConsentRequest, agentHint = "MCP clie
         return;
       }
       if (incoming.method === "POST" && url.pathname === "/decide") {
+        if (
+          !allowLocalPost({
+            origin: incoming.headers.origin,
+            referer: incoming.headers.referer,
+            "sec-fetch-site": Array.isArray(incoming.headers["sec-fetch-site"])
+              ? incoming.headers["sec-fetch-site"][0]
+              : incoming.headers["sec-fetch-site"],
+          })
+        ) {
+          res.writeHead(403);
+          res.end("forbidden");
+          return;
+        }
         let body = "";
         incoming.on("data", (c) => {
           body += c;

@@ -66,6 +66,7 @@ add the service. **Do not ask them for the key.**
 5. If TokenSheath is unreachable, tell the user to start it (\`node bin/sheath.mjs serve\`). Do not fall back to "paste your key".
 6. Writes will pop an approval card on their machine. Wait. Do not retry-spam.
 7. Cloud / remote preview **cannot** reach the user's TokenSheath. For hosted demos, mock the ping or explain they must run the app locally. Do not collect keys as a workaround.
+8. Session reads are **that path prefix** on that origin, not the whole API. A grant for \`/v1/balance\` does not cover \`/v1/charges\`.
 
 ## What to generate
 

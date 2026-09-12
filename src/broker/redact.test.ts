@@ -29,3 +29,14 @@ test("redactor strips sensitive keys and secret-shaped values", () => {
   assert.equal(containsSecret(out), false);
   assert.equal(containsSecret(input), true);
 });
+
+test("client_secret and extra stored secrets are redacted", () => {
+  const out = redact(
+    { client_secret: "whsec_hello", note: "leak sk-proj-abcdefghijklmnopqrstuvwxyz" },
+    ["super-unique-store-secret"],
+  ) as { client_secret: string; note: string };
+  assert.equal(out.client_secret, REDACTED);
+  assert.equal(out.note, REDACTED);
+  const extra = redact("wrap super-unique-store-secret wrap", ["super-unique-store-secret"]);
+  assert.equal(extra, "wrap [redacted] wrap");
+});

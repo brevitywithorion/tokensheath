@@ -58,6 +58,7 @@ test("read grant never covers a write even on the same origin", () => {
     session_id: "s",
     origin: get.origin,
     fingerprint: "",
+    path_prefix: get.path,
   };
   const post = buildIntent(
     "static.request",

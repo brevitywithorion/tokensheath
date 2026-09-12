@@ -20,6 +20,7 @@ export class GrantStore {
     method?: string;
     origin: string;
     fingerprint: string;
+    pathPrefix?: string;
   }): Grant {
     const read = isReadTool(input.tool, input.method);
     const session = input.mode === "session" && read;
@@ -35,6 +36,7 @@ export class GrantStore {
       session_id: input.sessionId,
       origin: input.origin,
       fingerprint: session ? "" : input.fingerprint,
+      path_prefix: session && input.tool === "static.request" ? input.pathPrefix || "" : "",
     };
     this.grants.push(grant);
     return grant;

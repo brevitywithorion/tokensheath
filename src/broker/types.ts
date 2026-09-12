@@ -17,6 +17,8 @@ export type StaticCredential = {
   base_url: string;
   key: string;
   created_at: string;
+  allow_private?: boolean;
+  allow_insecure?: boolean;
 };
 
 export type Credential = GithubCredential | StaticCredential;
@@ -38,6 +40,7 @@ export type Grant = {
   session_id: string;
   origin: string;
   fingerprint: string;
+  path_prefix: string;
 };
 
 export type Ticket = {
@@ -119,10 +122,20 @@ export const SESSION_MS = 15 * 60 * 1000;
 export const SESSION_CALLS = 20;
 export const CONSENT_TIMEOUT_MS = 120_000;
 
-export function sessionGrantLabel(origin?: string): string {
-  const host = origin?.replace(/^https?:\/\//, "").split("/")[0];
-  const where = host ? host : "this origin";
-  return `15 min · 20 calls · ${where} · reads only`;
+export function sessionGrantLabel(origin?: string, path?: string): string {
+  let host = "";
+  let p = (path ?? "").split("?")[0];
+  if (origin) {
+    try {
+      const u = origin.includes("://") ? new URL(origin) : new URL(`https://${origin}`);
+      host = u.host;
+      if (!p) p = u.pathname;
+    } catch {
+      host = origin.replace(/^https?:\/\//, "").split("/")[0] ?? origin;
+    }
+  }
+  const place = host ? `${host}${p && p !== "/" ? p : ""}` : "this origin";
+  return `15 min · 20 calls · ${place} · this path prefix · reads only`;
 }
 
 export const GITHUB_READ_TOOLS = [

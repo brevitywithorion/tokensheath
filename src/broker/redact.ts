@@ -1,8 +1,8 @@
 const SENSITIVE_KEY =
-  /^(token|access_token|refresh_token|authorization|secret|password|cookie|set-cookie|api_key|apikey)$/i;
+  /secret|password|passwd|token|authorization|cookie|api[_-]?key|private[_-]?key|^jwt$/i;
 
 const SECRET_VALUE =
-  /^(gh[pousr]_|gho_|github_pat_|sk_live_|sk_test_|sk-ant-|rk_live_|rk_test_).{8,}/i;
+  /(gh[pousr]_|gho_|github_pat_|sk_live_|sk_test_|sk-ant-|sk-proj-|sk-[a-zA-Z0-9_-]{16,}|rk_live_|rk_test_|whsec_|xox[baprs]-|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{10,})/i;
 
 const BEARER_VALUE = /^Bearer\s+\S+/i;
 
@@ -13,19 +13,24 @@ export function looksLikeSecret(value: string): boolean {
   return SECRET_VALUE.test(v) || BEARER_VALUE.test(v);
 }
 
-export function redact(value: unknown): unknown {
+export function redact(value: unknown, extraSecrets: string[] = []): unknown {
   if (value == null) return value;
   if (typeof value === "string") {
-    return looksLikeSecret(value) ? REDACTED : value;
+    if (looksLikeSecret(value)) return REDACTED;
+    let out = value;
+    for (const secret of extraSecrets) {
+      if (secret && out.includes(secret)) out = out.split(secret).join(REDACTED);
+    }
+    return out;
   }
-  if (Array.isArray(value)) return value.map(redact);
+  if (Array.isArray(value)) return value.map((v) => redact(v, extraSecrets));
   if (typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (SENSITIVE_KEY.test(k)) {
         out[k] = REDACTED;
       } else {
-        out[k] = redact(v);
+        out[k] = redact(v, extraSecrets);
       }
     }
     return out;

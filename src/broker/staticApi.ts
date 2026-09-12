@@ -1,5 +1,5 @@
 import { applyHeaderTemplate } from "./store.ts";
-import { resolveSameOriginUrl } from "./origin.ts";
+import { composeStaticUrl } from "./origin.ts";
 import { fetchInit, isRedirectStatus, REDIRECT_DENIED } from "./http.ts";
 import type { StaticCredential } from "./types.ts";
 
@@ -20,16 +20,14 @@ export async function staticRequest(opts: {
   json?: unknown;
   fetchImpl?: typeof fetch;
 }): Promise<{ status: number; data: unknown; url: string; called: boolean; redirectDenied?: boolean }> {
-  const resolved = resolveSameOriginUrl(opts.cred.base_url, opts.path);
+  const resolved = composeStaticUrl(opts.cred.base_url, opts.path, opts.query, {
+    allowPrivate: opts.cred.allow_private,
+    allowInsecure: opts.cred.allow_insecure,
+  });
   if (!resolved.ok) {
     throw Object.assign(new Error(resolved.message), { code: "origin_denied", called: false });
   }
   const url = resolved.url;
-  if (opts.query && typeof opts.query === "object") {
-    for (const [k, v] of Object.entries(opts.query)) {
-      if (v != null) url.searchParams.set(k, String(v));
-    }
-  }
   const fetchImpl = opts.fetchImpl ?? fetch;
   const headers: Record<string, string> = {
     Accept: "application/json",

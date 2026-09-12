@@ -84,6 +84,8 @@ export class MemoryStore {
       base_url: input.base_url,
       key: input.key,
       created_at: existing?.created_at ?? new Date().toISOString(),
+      allow_private: input.allow_private,
+      allow_insecure: input.allow_insecure,
     };
     this.store.creds = this.store.creds.filter((c) => !(c.kind === "static_key" && c.id === cred.id));
     this.store.creds.push(cred);

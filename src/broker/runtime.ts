@@ -2,7 +2,7 @@ import { AuditLog } from "./audit.ts";
 import { GrantStore, isReadTool } from "./grants.ts";
 import { capPerPage, githubRequest } from "./github.ts";
 import { parseStaticMethod, staticRequest } from "./staticApi.ts";
-import { resolveSameOriginUrl } from "./origin.ts";
+import { composeStaticUrl } from "./origin.ts";
 import { buildIntent, knownTool } from "./policy.ts";
 import { containsSecret, redact } from "./redact.ts";
 import { riskFor } from "./risk.ts";
@@ -195,6 +195,7 @@ export class BrokerRuntime {
         method: intent.method,
         origin: intent.origin,
         fingerprint: intent.fingerprint,
+        pathPrefix: intent.path,
       });
       decision = mode === "once" ? "allow_once" : "allow_session";
     }
@@ -259,7 +260,7 @@ export class BrokerRuntime {
     status: number,
     data: unknown,
   ): ToolResult {
-    const redacted = redact(data);
+    const redacted = redact(data, this.store.secrets());
     this.audit.append({
       tool,
       cred_id: credId,
@@ -288,8 +289,12 @@ export class BrokerRuntime {
     }
     if (tool === "static.request") {
       const method = String(args.method ?? "GET").toUpperCase();
-      const resolved = resolveSameOriginUrl(baseUrl, String(args.path ?? ""));
-      const url = resolved.ok ? resolved.url.toString() : String(args.path ?? "");
+      const composed = composeStaticUrl(
+        baseUrl,
+        String(args.path ?? ""),
+        args.query as Record<string, unknown> | undefined,
+      );
+      const url = composed.ok ? composed.url.toString() : String(args.path ?? "");
       return {
         kind: "static",
         method,

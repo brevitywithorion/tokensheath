@@ -1,6 +1,7 @@
 import http from "node:http";
 import { GROKBUILD_CONTRACT, SHEATH_PING_PORT } from "../lib/grokbuild-contract.ts";
 import { normalizeBaseUrl } from "../broker/origin.ts";
+import { allowLocalPost, isLoopbackHostHeader } from "../broker/loopback.ts";
 import { presetById, SERVICE_PRESETS } from "../broker/presets.ts";
 import { formatAuditLines } from "../broker/redact.ts";
 import { saveDiskStore } from "./disk-store.ts";
@@ -9,7 +10,16 @@ import { localRuntime } from "./local-runtime.ts";
 import { openUrl } from "./open-url.ts";
 
 function isLocalHost(host: string): boolean {
-  return host.startsWith("127.0.0.1") || host.startsWith("localhost");
+  return isLoopbackHostHeader(host);
+}
+
+function postAllowed(incoming: http.IncomingMessage): boolean {
+  const site = incoming.headers["sec-fetch-site"];
+  return allowLocalPost({
+    origin: incoming.headers.origin,
+    referer: incoming.headers.referer,
+    "sec-fetch-site": Array.isArray(site) ? site[0] : site,
+  });
 }
 
 function readBody(incoming: http.IncomingMessage, limit = 32_000): Promise<string> {
@@ -86,6 +96,10 @@ function uiPage(): string {
     <label>Secret (never shown to the agent)
       <input id="key" type="password" autocomplete="off"/>
     </label>
+    <label style="display:flex;align-items:center;gap:.5rem;margin-top:12px;height:auto">
+      <input id="localdev" type="checkbox" style="width:auto;height:auto"/>
+      Allow local/dev (http and private addresses)
+    </label>
     <div class="row">
       <button id="save" type="button">Save</button>
     </div>
@@ -126,9 +140,27 @@ async function refresh() {
 refresh();
 document.getElementById("save").onclick = async () => {
   const msg = document.getElementById("save-msg");
-  const body = { preset: preset.value, nickname: nickname.value, base_url: base.value, key: document.getElementById("key").value };
-  const r = await fetch("/v1/services", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const j = await r.json();
+  const body = {
+    preset: preset.value,
+    nickname: nickname.value,
+    base_url: base.value,
+    key: document.getElementById("key").value,
+    allow_private: document.getElementById("localdev").checked,
+    allow_insecure: document.getElementById("localdev").checked,
+  };
+  async function post(payload) {
+    const r = await fetch("/v1/services", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    return r.json();
+  }
+  let j = await post(body);
+  if (j.error === "exists") {
+    if (!confirm("Replace " + (body.nickname || "this service") + "? This changes the origin and key.")) {
+      msg.className = "err";
+      msg.textContent = "Not replaced.";
+      return;
+    }
+    j = await post({ ...body, confirm_overwrite: true });
+  }
   document.getElementById("key").value = "";
   msg.className = j.ok ? "ok" : "err";
   msg.textContent = j.ok ? "Saved. Agents can ping now." : (j.message || "Could not save.");
@@ -171,17 +203,29 @@ export async function runServe(port = SHEATH_PING_PORT): Promise<void> {
         return;
       }
       if (incoming.method === "POST" && url.pathname === "/v1/services") {
+        if (!postAllowed(incoming)) {
+          send(res, 403, { ok: false, error: "forbidden", message: "Cross-origin save refused." });
+          return;
+        }
         const raw = JSON.parse((await readBody(incoming)) || "{}") as {
           preset?: string;
           nickname?: string;
           base_url?: string;
           key?: string;
+          confirm_overwrite?: boolean;
+          allow_private?: boolean;
+          allow_insecure?: boolean;
         };
         const preset = presetById(raw.preset);
+        const localDev = Boolean(raw.allow_private || raw.allow_insecure);
         const baseRaw = preset?.base_url || raw.base_url || "";
-        const norm = normalizeBaseUrl(baseRaw);
+        const norm = normalizeBaseUrl(baseRaw, {
+          requireHttps: preset?.https_only || !localDev,
+          allowPrivate: localDev,
+          allowInsecure: localDev && !preset?.https_only,
+        });
         if (!norm.ok) {
-          send(res, 400, { ok: false, error: "origin_denied", message: "Need a full https website for the API." });
+          send(res, 400, { ok: false, error: "origin_denied", message: norm.message });
           return;
         }
         const key = (raw.key ?? "").trim();
@@ -189,18 +233,34 @@ export async function runServe(port = SHEATH_PING_PORT): Promise<void> {
           send(res, 400, { ok: false, error: "missing_key", message: "Paste the secret here, not in the chat." });
           return;
         }
+        const nickname = (raw.nickname || preset?.nickname || "my service").trim();
+        const existing = store.staticKey(nickname);
+        if (existing && !raw.confirm_overwrite) {
+          send(res, 409, {
+            ok: false,
+            error: "exists",
+            message: `A service named "${nickname}" is already saved. Confirm replace in the window.`,
+          });
+          return;
+        }
         const saved = store.upsertStatic({
-          nickname: (raw.nickname || preset?.nickname || "my service").trim(),
+          nickname,
           header_name: preset?.header_name || "Authorization",
           header_template: preset?.header_template || "Bearer {{key}}",
           base_url: norm.url.origin,
           key,
+          allow_private: localDev,
+          allow_insecure: localDev && !preset?.https_only,
         });
         await saveDiskStore(store);
         send(res, 200, { ok: true, nickname: saved.nickname, origin: norm.url.origin });
         return;
       }
       if (incoming.method === "POST" && url.pathname === "/v1/request") {
+        if (!postAllowed(incoming)) {
+          send(res, 403, { ok: false, error: "forbidden", message: "Cross-origin ping refused." });
+          return;
+        }
         const raw = JSON.parse((await readBody(incoming)) || "{}") as {
           service?: string;
           method?: string;

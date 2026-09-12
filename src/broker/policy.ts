@@ -1,5 +1,5 @@
 import { parseStaticMethod } from "./staticApi.ts";
-import { resolveSameOriginUrl } from "./origin.ts";
+import { composeStaticUrl, pathPrefixAllows } from "./origin.ts";
 import { GITHUB_READ_TOOLS, TOOL_LABELS, type Grant, type Ticket } from "./types.ts";
 import type { Credential } from "./types.ts";
 
@@ -101,24 +101,27 @@ export function buildIntent(
     if (!method) {
       return { error: "method_not_allowed", message: "method not allowed — MVP allows GET and POST only." };
     }
-    const locked = resolveSameOriginUrl(cred.base_url, String(args.path ?? ""));
-    if (!locked.ok) {
-      return { error: "origin_denied", message: locked.message };
+    const composed = composeStaticUrl(cred.base_url, String(args.path ?? ""), args.query as Record<string, unknown> | undefined, {
+      allowPrivate: cred.allow_private,
+      allowInsecure: cred.allow_insecure,
+    });
+    if (!composed.ok) {
+      return { error: "origin_denied", message: composed.message };
     }
     const body = method === "GET" ? undefined : args.json;
     const fingerprint = requestFingerprint({
       tool,
       method,
-      url: locked.url.toString(),
+      url: composed.url.toString(),
       body,
     });
     return {
       tool,
       credId: cred.id,
       method,
-      origin: locked.url.origin,
-      url: locked.url.toString(),
-      path: String(args.path ?? ""),
+      origin: composed.url.origin,
+      url: composed.url.toString(),
+      path: composed.url.pathname,
       body,
       fingerprint,
       read: method === "GET",
@@ -134,7 +137,9 @@ export function grantCovers(grant: Grant, intent: RequestIntent, now = Date.now(
   if (grant.calls_used >= grant.max_calls) return false;
   if (grant.origin && grant.origin !== intent.origin) return false;
   if (grant.scope === "read") {
-    return intent.read;
+    if (!intent.read) return false;
+    if (grant.path_prefix) return pathPrefixAllows(grant.path_prefix, intent.path);
+    return true;
   }
   if (grant.fingerprint) return grant.fingerprint === intent.fingerprint;
   return grant.tool === intent.tool && !intent.read;

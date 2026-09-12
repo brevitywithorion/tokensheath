@@ -6,6 +6,7 @@ export type ServicePreset = {
   header_name: string;
   header_template: string;
   try_path: string;
+  https_only: boolean;
 };
 
 export const SERVICE_PRESETS: ServicePreset[] = [
@@ -17,6 +18,7 @@ export const SERVICE_PRESETS: ServicePreset[] = [
     header_name: "Authorization",
     header_template: "Bearer {{key}}",
     try_path: "/v1/balance",
+    https_only: true,
   },
   {
     id: "openai",
@@ -26,6 +28,7 @@ export const SERVICE_PRESETS: ServicePreset[] = [
     header_name: "Authorization",
     header_template: "Bearer {{key}}",
     try_path: "/v1/models",
+    https_only: true,
   },
   {
     id: "jsonplaceholder",
@@ -35,6 +38,7 @@ export const SERVICE_PRESETS: ServicePreset[] = [
     header_name: "Authorization",
     header_template: "Bearer {{key}}",
     try_path: "/todos/1",
+    https_only: true,
   },
 ];
 
