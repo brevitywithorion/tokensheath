@@ -1,6 +1,6 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { CONSENT_TIMEOUT_MS, type ConsentChoice, type ConsentRequest } from "../broker/types.ts";
+import { CONSENT_TIMEOUT_MS, sessionGrantLabel, type ConsentChoice, type ConsentRequest } from "../broker/types.ts";
 import { openUrl } from "./open-url.ts";
 
 function escapeHtml(s: string): string {
@@ -63,12 +63,21 @@ function page(req: ConsentRequest): string {
       <dt>What</dt><dd>${escapeHtml(req.toolLabel)}</dd>
       <dt>Where</dt><dd>${escapeHtml(req.preview.kind === "static" ? req.preview.url : req.credNickname)}</dd>
       <dt>Credential</dt><dd>${escapeHtml(req.credNickname)} · never shown</dd>
+      ${
+        write
+          ? ""
+          : `<dt>If session</dt><dd>${escapeHtml(
+              sessionGrantLabel(req.preview.kind === "static" ? req.preview.url : undefined),
+            )}</dd>`
+      }
     </dl>
     ${preview}
     <p class="note">${
       write
         ? "Every write needs its own approval. The agent does not receive the key."
-        : "Allow once = this request only. Allow reads this session = later reads skip the prompt. Writes still ask."
+        : `Allow once = this request only. Allow reads this session = ${sessionGrantLabel(
+            req.preview.kind === "static" ? req.preview.url : undefined,
+          )}. Writes still ask.`
     }</p>
     <form method="POST" action="/decide">
       <input type="hidden" name="nonce" value="${escapeHtml(req.nonce)}"/>

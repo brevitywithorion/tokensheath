@@ -32,7 +32,7 @@ export function demoGithubToken(): string {
 export function createMockGithubState(token = demoGithubToken()): MockGithubState {
   return {
     token,
-    login: "orionwills",
+    login: "demo-user",
     force401: false,
     notifications: [
       {
@@ -42,9 +42,9 @@ export function createMockGithubState(token = demoGithubToken()): MockGithubStat
         subject: {
           title: "Review the broker consent timeout",
           type: "Issue",
-          url: "https://api.github.com/repos/acme/broker/issues/12",
+          url: "https://api.github.com/repos/acme/tokensheath/issues/12",
         },
-        repository: { full_name: "acme/broker" },
+        repository: { full_name: "acme/tokensheath" },
         updated_at: "2026-09-12T18:01:00Z",
       },
       {
@@ -54,9 +54,9 @@ export function createMockGithubState(token = demoGithubToken()): MockGithubStat
         subject: {
           title: "Redact secrets on tool results",
           type: "PullRequest",
-          url: "https://api.github.com/repos/acme/broker/pulls/4",
+          url: "https://api.github.com/repos/acme/tokensheath/pulls/4",
         },
-        repository: { full_name: "acme/broker" },
+        repository: { full_name: "acme/tokensheath" },
         updated_at: "2026-09-12T16:40:00Z",
       },
       {
@@ -66,9 +66,9 @@ export function createMockGithubState(token = demoGithubToken()): MockGithubStat
         subject: {
           title: "MCP stdio handshake notes",
           type: "Issue",
-          url: "https://api.github.com/repos/acme/broker/issues/2",
+          url: "https://api.github.com/repos/acme/tokensheath/issues/2",
         },
-        repository: { full_name: "acme/broker" },
+        repository: { full_name: "acme/tokensheath" },
         updated_at: "2026-09-10T09:12:00Z",
       },
     ],
@@ -78,8 +78,8 @@ export function createMockGithubState(token = demoGithubToken()): MockGithubStat
         number: 12,
         title: "Review the broker consent timeout",
         state: "open",
-        html_url: "https://github.com/acme/broker/issues/12",
-        repository_url: "https://api.github.com/repos/acme/broker",
+        html_url: "https://github.com/acme/tokensheath/issues/12",
+        repository_url: "https://api.github.com/repos/acme/tokensheath",
         comments: [],
       },
       {
@@ -87,8 +87,8 @@ export function createMockGithubState(token = demoGithubToken()): MockGithubStat
         number: 4,
         title: "Redact secrets on tool results",
         state: "open",
-        html_url: "https://github.com/acme/broker/pull/4",
-        repository_url: "https://api.github.com/repos/acme/broker",
+        html_url: "https://github.com/acme/tokensheath/pull/4",
+        repository_url: "https://api.github.com/repos/acme/tokensheath",
         comments: [],
       },
     ],

@@ -2,58 +2,64 @@
 
 **The model never sees the key.**
 
-Sheath the token. Unsheath only to act. TokenSheath is a local authority broker: the agent requests a named action, you approve it on this machine, the credential is injected on the wire and never returned to the model.
+Local credential broker for agents. The agent requests an action. You approve it. TokenSheath injects the credential on the wire. The model never holds the secret.
 
-Need **Node.js 22+**. Windows works. Git Bash is optional.
+Need **Node.js 22+**. Windows, macOS, and Linux.
 
-## Windows (PowerShell)
+## Threat model
+
+TokenSheath protects **model context**. Tool args, tool results, and the audit log must not contain the key.
+
+It does **not** protect a same-user process with a shell. Coding agents can read files. If they can open `~/.tokensheath`, they can read the store. That is documented, not a bug.
+
+## What it does
+
+- **At rest:** AES-GCM. `master.key` is mode 0600.
+- **On the wire:** origin lock. Redirects refused. MVP methods: GET and POST.
+- **Consent:** reads may be once, or a session of **15 min · 20 calls · this origin · reads only**. Writes are always once.
+- **Revoke:** `sheath revoke --all` writes a watched epoch. A running `sheath mcp` drops live grants.
+- **Audit:** JSONL without secrets.
+
+## Try it (no Cursor)
 
 ```powershell
 git clone https://github.com/brevitywithorion/tokensheath.git
 cd tokensheath
 npm install
 node bin/sheath.mjs onboard
-node bin/sheath.mjs call GET /todos/1
-node bin/sheath.mjs log
 ```
 
-Cursor MCP config — use `node`, not bash. Put **your** clone path in:
+Use a throwaway or dummy key. Example origin: `https://jsonplaceholder.typicode.com`.
+
+```powershell
+node bin/sheath.mjs call GET /todos/1
+node bin/sheath.mjs log
+node bin/sheath.mjs revoke --all
+```
+
+An approval tab opens on this machine. Allow once. The printed JSON must not contain the key.
+
+## Cursor / Claude Code later
 
 ```json
 {
   "mcpServers": {
     "tokensheath": {
       "command": "node",
-      "args": [
-        "C:\\Users\\YOU\\tokensheath\\bin\\sheath.mjs",
-        "mcp"
-      ]
+      "args": ["C:\\Users\\YOU\\tokensheath\\bin\\sheath.mjs", "mcp"]
     }
   }
 }
 ```
 
-Then in Cursor: save a test-mode Stripe (or any GET) key via `onboard`, ask the agent to call `static.request`. A local approval tab opens. Allow once.
+On macOS/Linux, `./bin/sheath mcp` is the same process.
 
-```powershell
-node bin/sheath.mjs log
-node bin/sheath.mjs revoke --all
-```
+Store: `~/.tokensheath` or `%USERPROFILE%\.tokensheath` (`SHEATH_HOME` overrides).
 
-Store: `%USERPROFILE%\.tokensheath` (override with `SHEATH_HOME`).
+## Why not .env
 
-## macOS / Linux
+`.env` puts the key in the same context as the model. TokenSheath keeps the key out of that context and asks you before using it.
 
-```
-git clone https://github.com/brevitywithorion/tokensheath.git
-cd tokensheath
-npm install
-./bin/sheath onboard
-./bin/sheath mcp
-```
+## License / contact
 
-## Honest limits
-
-A same-user agent with shell can still read `~/.tokensheath`. The promise is **model context**, not an OS sandbox. This is not a hosted API.
-
-`tokensheath.com` looked unregistered at pick-time. Register it before announcing.
+Source is here while the product domain is in motion. Report vulnerabilities via GitHub Security Advisories on this repo. Do not file a public issue with a working exploit.

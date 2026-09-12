@@ -26,7 +26,7 @@ export async function githubRequest(opts: {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
     Authorization: `Bearer ${opts.token}`,
-    "User-Agent": "broker-mvp",
+    "User-Agent": "tokensheath",
   };
   const init: RequestInit = fetchInit({ method: opts.method ?? "GET", headers });
   if (opts.body !== undefined) {

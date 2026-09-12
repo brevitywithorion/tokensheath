@@ -113,6 +113,12 @@ export const SESSION_MS = 15 * 60 * 1000;
 export const SESSION_CALLS = 20;
 export const CONSENT_TIMEOUT_MS = 120_000;
 
+export function sessionGrantLabel(origin?: string): string {
+  const host = origin?.replace(/^https?:\/\//, "").split("/")[0];
+  const where = host ? host : "this origin";
+  return `15 min · 20 calls · ${where} · reads only`;
+}
+
 export const GITHUB_READ_TOOLS = [
   "github.notifications.list",
   "github.issues.search",

@@ -8,8 +8,8 @@ test("audit formatter never prints store secrets", async () => {
   const token = "gho_" + "s".repeat(36);
   const key = "sk_test_" + "k".repeat(24);
   store.upsertGithub({
-    nickname: "orionwills",
-    account_login: "orionwills",
+    nickname: "demo-user",
+    account_login: "demo-user",
     access_token: token,
     token_type: "bearer",
   });
