@@ -9,6 +9,7 @@ import { sheathHome } from "./home.ts";
 import { BrokerRuntime } from "../broker/runtime.ts";
 import { GrantStore } from "../broker/grants.ts";
 import { requestConsentBrowser } from "./consent-server.ts";
+import { normalizeBaseUrl } from "../broker/origin.ts";
 
 function usage(): string {
   return `TokenSheath — sheath the token, unsheath only to act.
@@ -47,7 +48,13 @@ function windowsMcpHint(): string {
 
 async function onboard(): Promise<void> {
   const nickname = (await prompt("Nickname [my service]: ")) || "my service";
-  const base = (await prompt("Base URL [https://api.stripe.com]: ")) || "https://api.stripe.com";
+  const baseRaw = (await prompt("Base URL [https://jsonplaceholder.typicode.com]: ")) || "https://jsonplaceholder.typicode.com";
+  const baseNorm = normalizeBaseUrl(baseRaw);
+  if (!baseNorm.ok) {
+    process.stderr.write(`${baseNorm.message} Use a full URL like https://jsonplaceholder.typicode.com\n`);
+    process.exit(1);
+  }
+  const base = baseNorm.url.origin;
   const header = (await prompt("Header name [Authorization]: ")) || "Authorization";
   const template = (await prompt("Header template [Bearer {{key}}]: ")) || "Bearer {{key}}";
   const key = await prompt("Key (never shown to the model): ");
@@ -64,7 +71,7 @@ async function onboard(): Promise<void> {
     key,
   });
   await saveDiskStore(store);
-  process.stderr.write(`Saved ${nickname} at ${sheathHome()}\n`);
+  process.stderr.write(`Saved ${nickname} → ${base} at ${sheathHome()}\n`);
   process.stderr.write("Try a request (no Cursor needed):\n");
   process.stderr.write("  node bin/sheath.mjs call GET /todos/1\n");
   process.stderr.write("Later, Cursor MCP config:\n");

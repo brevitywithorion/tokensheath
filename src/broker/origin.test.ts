@@ -42,3 +42,9 @@ test("origin lock allows same-origin relative paths", () => {
   assert.equal(ok.ok, true);
   if (ok.ok) assert.equal(ok.url.toString(), "https://api.stripe.com/v1/balance");
 });
+
+test("base URL without https is normalized", () => {
+  const ok = resolveSameOriginUrl("jsonplaceholder.typicode.com", "/todos/1");
+  assert.equal(ok.ok, true);
+  if (ok.ok) assert.equal(ok.url.origin, "https://jsonplaceholder.typicode.com");
+});
