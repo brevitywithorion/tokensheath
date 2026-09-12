@@ -10,12 +10,15 @@ import { BrokerRuntime } from "../broker/runtime.ts";
 import { GrantStore } from "../broker/grants.ts";
 import { requestConsentBrowser } from "./consent-server.ts";
 import { normalizeBaseUrl } from "../broker/origin.ts";
+import { runServe } from "./serve.ts";
+import { SHEATH_PING_PORT } from "../lib/grokbuild-contract.ts";
 
 function usage(): string {
   return `TokenSheath — sheath the token, unsheath only to act.
 
   sheath onboard              Save one service key (prompted, never printed)
   sheath status               Show nicknames only
+  sheath serve                Window: add a key, copy Grok Build contract
   sheath call GET /todos/1    One request — opens an approval tab
   sheath log                  Audit log (no secrets)
   sheath revoke --all         Kill live grants
@@ -74,6 +77,8 @@ async function onboard(): Promise<void> {
   process.stderr.write(`Saved ${nickname} → ${base} at ${sheathHome()}\n`);
   process.stderr.write("Try a request (no Cursor needed):\n");
   process.stderr.write("  node bin/sheath.mjs call GET /todos/1\n");
+  process.stderr.write("Or open the window:\n");
+  process.stderr.write("  node bin/sheath.mjs serve\n");
   process.stderr.write("Later, Cursor MCP config:\n");
   process.stderr.write(windowsMcpHint());
 }
@@ -157,6 +162,11 @@ async function main(): Promise<void> {
   }
   if (cmd === "call") {
     await call(argv.slice(1));
+    return;
+  }
+  if (cmd === "serve") {
+    const port = Number(process.env.SHEATH_PORT) || SHEATH_PING_PORT;
+    await runServe(port);
     return;
   }
   if (cmd === "revoke" && flag === "--all") {

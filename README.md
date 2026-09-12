@@ -30,18 +30,21 @@ This is not an OS sandbox. A same-user shell can still read `~/.tokensheath`.
 git clone https://github.com/brevitywithorion/tokensheath.git
 cd tokensheath
 npm install
-node bin/sheath.mjs onboard
+node bin/sheath.mjs serve
 ```
 
-Use a throwaway or dummy key. Example origin: `https://jsonplaceholder.typicode.com`.
+A window opens. Add a service (Stripe, OpenAI, or practice). Copy the Grok Build contract.
 
-```powershell
-node bin/sheath.mjs call GET /todos/1
-node bin/sheath.mjs log
-node bin/sheath.mjs revoke --all
+Agents ping:
+
+```
+POST http://127.0.0.1:8787/v1/request
+{ "method": "GET", "path": "/todos/1" }
 ```
 
-An approval tab opens on this machine. Allow once. The printed JSON must not contain the key.
+They receive JSON. They never receive the key. You still click Allow.
+
+Paste [GROKBUILD-tokensheath.md](./GROKBUILD-tokensheath.md) into a Grok Build chat.
 
 ## Cursor / Claude Code later
 
