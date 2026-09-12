@@ -1,0 +1,107 @@
+import { decryptJson, encryptJson, hexToKey, keyToHex, randomKeyBytes } from "./crypto.ts";
+import { id } from "./ids.ts";
+import type { Credential, Store, StaticCredential, GithubCredential } from "./types.ts";
+
+export function emptyStore(): Store {
+  return { version: 1, creds: [] };
+}
+
+export class MemoryStore {
+  store: Store;
+  masterKey: Uint8Array;
+
+  constructor(store: Store = emptyStore(), masterKey: Uint8Array = randomKeyBytes()) {
+    this.store = store;
+    this.masterKey = masterKey;
+  }
+
+  secrets(): string[] {
+    const out: string[] = [];
+    for (const c of this.store.creds) {
+      if (c.kind === "oauth_github") out.push(c.access_token);
+      if (c.kind === "static_key") out.push(c.key);
+    }
+    return out.filter(Boolean);
+  }
+
+  github(): GithubCredential | undefined {
+    return this.store.creds.find((c): c is GithubCredential => c.kind === "oauth_github");
+  }
+
+  staticKey(): StaticCredential | undefined {
+    return this.store.creds.find((c): c is StaticCredential => c.kind === "static_key");
+  }
+
+  publicCreds(): { id: string; kind: string; nickname: string; extra: string }[] {
+    return this.store.creds.map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      nickname: c.nickname,
+      extra: c.kind === "oauth_github" ? c.account_login : c.base_url,
+    }));
+  }
+
+  upsertGithub(input: Omit<GithubCredential, "id" | "kind" | "created_at"> & { id?: string }): GithubCredential {
+    const existing = this.github();
+    const cred: GithubCredential = {
+      id: input.id ?? existing?.id ?? id("crd"),
+      kind: "oauth_github",
+      nickname: input.nickname,
+      account_login: input.account_login,
+      access_token: input.access_token,
+      token_type: input.token_type,
+      created_at: existing?.created_at ?? new Date().toISOString(),
+    };
+    this.store.creds = this.store.creds.filter((c) => c.kind !== "oauth_github");
+    this.store.creds.push(cred);
+    return cred;
+  }
+
+  upsertStatic(input: Omit<StaticCredential, "id" | "kind" | "created_at"> & { id?: string }): StaticCredential {
+    const existing = this.staticKey();
+    const cred: StaticCredential = {
+      id: input.id ?? existing?.id ?? id("crd"),
+      kind: "static_key",
+      nickname: input.nickname,
+      header_name: input.header_name || "Authorization",
+      header_template: input.header_template || "Bearer {{key}}",
+      base_url: input.base_url,
+      key: input.key,
+      created_at: existing?.created_at ?? new Date().toISOString(),
+    };
+    this.store.creds = this.store.creds.filter((c) => c.kind !== "static_key");
+    this.store.creds.push(cred);
+    return cred;
+  }
+
+  clearGithubToken(): void {
+    const g = this.github();
+    if (g) g.access_token = "";
+  }
+
+  async snapshot(): Promise<{ keyHex: string; blob: string }> {
+    return {
+      keyHex: keyToHex(this.masterKey),
+      blob: await encryptJson(this.masterKey, this.store),
+    };
+  }
+
+  static async restore(keyHex: string, blob: string): Promise<MemoryStore> {
+    const key = hexToKey(keyHex);
+    const store = await decryptJson<Store>(key, blob);
+    if (!store || store.version !== 1 || !Array.isArray(store.creds)) {
+      throw new Error("invalid store");
+    }
+    return new MemoryStore(store, key);
+  }
+}
+
+export function applyHeaderTemplate(template: string, key: string): string {
+  return template.replaceAll("{{key}}", key);
+}
+
+export function credForTool(store: MemoryStore, tool: string): Credential | undefined {
+  if (tool.startsWith("github.")) return store.github();
+  if (tool === "static.request") return store.staticKey();
+  return undefined;
+}
