@@ -6,15 +6,19 @@ import { formatAuditLines } from "../broker/redact.ts";
 import { bumpRevokeEpoch } from "./revoke-watch.ts";
 import { runMcp } from "./mcp.ts";
 import { sheathHome } from "./home.ts";
+import { BrokerRuntime } from "../broker/runtime.ts";
+import { GrantStore } from "../broker/grants.ts";
+import { requestConsentBrowser } from "./consent-server.ts";
 
 function usage(): string {
   return `TokenSheath — sheath the token, unsheath only to act.
 
-  sheath onboard     Save one service key (prompted, never printed)
-  sheath status      Show nicknames only
-  sheath log         Audit log (no secrets)
-  sheath revoke --all  Kill live grants in a running sheath mcp
-  sheath mcp         MCP stdio server for Cursor / Claude Code
+  sheath onboard              Save one service key (prompted, never printed)
+  sheath status               Show nicknames only
+  sheath call GET /todos/1    One request — opens an approval tab
+  sheath log                  Audit log (no secrets)
+  sheath revoke --all         Kill live grants
+  sheath mcp                  MCP stdio (Cursor / Claude Code later)
 
 This process is local. There is no cloud. Secrets never go to stdout.
 `;
@@ -27,11 +31,25 @@ async function prompt(q: string): Promise<string> {
   return ans.trim();
 }
 
+function windowsMcpHint(): string {
+  const home = process.env.USERPROFILE || process.env.HOME || "C:\\\\Users\\\\YOU";
+  const path = `${home}\\tokensheath\\bin\\sheath.mjs`.replaceAll("\\", "\\\\");
+  return `{
+  "mcpServers": {
+    "tokensheath": {
+      "command": "node",
+      "args": ["${path}", "mcp"]
+    }
+  }
+}
+`;
+}
+
 async function onboard(): Promise<void> {
   const nickname = (await prompt("Nickname [my service]: ")) || "my service";
   const base = (await prompt("Base URL [https://api.stripe.com]: ")) || "https://api.stripe.com";
   const header = (await prompt("Header name [Authorization]: ")) || "Authorization";
-  const template = (await prompt('Header template [Bearer {{key}}]: ')) || "Bearer {{key}}";
+  const template = (await prompt("Header template [Bearer {{key}}]: ")) || "Bearer {{key}}";
   const key = await prompt("Key (never shown to the model): ");
   if (!key) {
     process.stderr.write("No key. Aborted.\n");
@@ -47,15 +65,10 @@ async function onboard(): Promise<void> {
   });
   await saveDiskStore(store);
   process.stderr.write(`Saved ${nickname} at ${sheathHome()}\n`);
-  process.stderr.write("Add to Cursor MCP config:\n");
-  process.stderr.write(`{
-  "mcpServers": {
-    "tokensheath": {
-      "command": "sheath",
-      "args": ["mcp"]
-    }
-  }
-}\n`);
+  process.stderr.write("Try a request (no Cursor needed):\n");
+  process.stderr.write("  node bin/sheath.mjs call GET /todos/1\n");
+  process.stderr.write("Later, Cursor MCP config:\n");
+  process.stderr.write(windowsMcpHint());
 }
 
 async function status(): Promise<void> {
@@ -76,8 +89,49 @@ async function log(): Promise<void> {
   process.stdout.write(`${formatAuditLines(events, store.secrets())}\n`);
 }
 
+function parseJsonFlag(argv: string[]): unknown {
+  const i = argv.indexOf("--json");
+  if (i === -1) return undefined;
+  const raw = argv[i + 1];
+  if (!raw) return undefined;
+  return JSON.parse(raw);
+}
+
+async function call(argv: string[]): Promise<void> {
+  const method = (argv[0] ?? "GET").toUpperCase();
+  const path = argv[1];
+  if (!path || !path.startsWith("/")) {
+    process.stderr.write("Usage: sheath call GET /todos/1\n");
+    process.exit(1);
+  }
+  const json = parseJsonFlag(argv);
+  const store = await loadDiskStore();
+  if (!store.staticKey()) {
+    process.stderr.write("No saved service. Run: node bin/sheath.mjs onboard\n");
+    process.exit(1);
+  }
+  const grants = new GrantStore();
+  const audit = new FileAudit();
+  const runtime = new BrokerRuntime({
+    store,
+    grants,
+    audit,
+    agentName: "PowerShell",
+    githubFetch: fetch,
+    staticFetch: fetch,
+    hooks: {
+      requestConsent: (req) => requestConsentBrowser(req, "PowerShell"),
+      requestGithubReconnect: async () => false,
+    },
+  });
+  process.stderr.write("Approval tab opening — Allow once.\n");
+  const result = await runtime.invoke("static.request", { method, path, json });
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
 async function main(): Promise<void> {
-  const [cmd, flag] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const [cmd, flag] = argv;
   if (!cmd || cmd === "-h" || cmd === "--help") {
     process.stderr.write(usage());
     return;
@@ -94,9 +148,13 @@ async function main(): Promise<void> {
     await log();
     return;
   }
+  if (cmd === "call") {
+    await call(argv.slice(1));
+    return;
+  }
   if (cmd === "revoke" && flag === "--all") {
     bumpRevokeEpoch();
-    process.stderr.write("Revoke epoch written. Running sheath mcp will drop live grants.\n");
+    process.stderr.write("Revoke epoch written.\n");
     return;
   }
   if (cmd === "mcp") {

@@ -13,7 +13,8 @@ git clone https://github.com/brevitywithorion/tokensheath.git
 cd tokensheath
 npm install
 node bin/sheath.mjs onboard
-node bin/sheath.mjs status
+node bin/sheath.mjs call GET /todos/1
+node bin/sheath.mjs log
 ```
 
 Cursor MCP config — use `node`, not bash. Put **your** clone path in:
