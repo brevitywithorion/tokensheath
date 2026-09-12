@@ -36,12 +36,16 @@ export type Grant = {
   max_calls: number;
   calls_used: number;
   session_id: string;
+  origin: string;
+  fingerprint: string;
 };
 
 export type Ticket = {
   id: string;
   grant_id: string;
   tool: string;
+  fingerprint: string;
+  used: boolean;
 };
 
 export type AuditDecision =
@@ -75,6 +79,8 @@ export type ConsentRequest = {
   preview: ConsentPreview;
   risk: "read" | "write" | "destructive";
   createdAt: number;
+  fingerprint: string;
+  origin: string;
 };
 
 export type ConsentPreview =

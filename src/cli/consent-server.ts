@@ -1,6 +1,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { CONSENT_TIMEOUT_MS, sessionGrantLabel, type ConsentChoice, type ConsentRequest } from "../broker/types.ts";
+import { shortFingerprint } from "../broker/policy.ts";
 import { openUrl } from "./open-url.ts";
 
 function escapeHtml(s: string): string {
@@ -56,18 +57,19 @@ function page(req: ConsentRequest): string {
 </style>
 <body>
   <div class="card">
-    <div class="kicker"><span>Agent approval required</span><span>${escapeHtml(req.risk)}</span></div>
+    <div class="kicker"><span>Agent approval required · never trust the agent</span><span>${escapeHtml(req.risk)}</span></div>
     <h1>${escapeHtml(actionLine(req))}</h1>
     <dl>
-      <dt>Who</dt><dd>${escapeHtml(req.agentName)}</dd>
+      <dt>Who</dt><dd>Untrusted · ${escapeHtml(req.agentName)}</dd>
       <dt>What</dt><dd>${escapeHtml(req.toolLabel)}</dd>
-      <dt>Where</dt><dd>${escapeHtml(req.preview.kind === "static" ? req.preview.url : req.credNickname)}</dd>
+      <dt>Where</dt><dd>${escapeHtml(req.preview.kind === "static" ? req.preview.url : req.origin || req.credNickname)}</dd>
       <dt>Credential</dt><dd>${escapeHtml(req.credNickname)} · never shown</dd>
+      <dt>Bound to</dt><dd>${escapeHtml(shortFingerprint(req.fingerprint))}${write ? " · this request only" : ""}</dd>
       ${
         write
           ? ""
           : `<dt>If session</dt><dd>${escapeHtml(
-              sessionGrantLabel(req.preview.kind === "static" ? req.preview.url : undefined),
+              sessionGrantLabel(req.preview.kind === "static" ? req.preview.url : req.origin),
             )}</dd>`
       }
     </dl>

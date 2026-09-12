@@ -3,6 +3,7 @@ import { GrantStore, isReadTool } from "./grants.ts";
 import { capPerPage, githubRequest } from "./github.ts";
 import { parseStaticMethod, staticRequest } from "./staticApi.ts";
 import { resolveSameOriginUrl } from "./origin.ts";
+import { buildIntent, knownTool } from "./policy.ts";
 import { containsSecret, redact } from "./redact.ts";
 import { riskFor } from "./risk.ts";
 import { REDIRECT_DENIED } from "./http.ts";
@@ -84,6 +85,20 @@ export class BrokerRuntime {
   }
 
   private async invokeInner(tool: string, args: Record<string, unknown>): Promise<ToolResult> {
+    if (!knownTool(tool)) {
+      this.audit.append({
+        tool,
+        cred_id: "-",
+        ticket: "-",
+        decision: "denied",
+        http_status: null,
+        detail: "unknown tool — default deny",
+      });
+      const result: ToolResult = { ok: false, error: "unknown_tool", message: "Unknown tool. Default deny." };
+      this.modelTrace.push({ tool, result });
+      return result;
+    }
+
     const cred = credForTool(this.store, tool);
     if (!cred) {
       this.audit.append({
@@ -103,47 +118,22 @@ export class BrokerRuntime {
       return result;
     }
 
-    if (tool === "static.request") {
-      const method = parseStaticMethod(args.method);
-      if (!method) {
-        const result: ToolResult = {
-          ok: false,
-          error: "method_not_allowed",
-          message: "MVP allows GET and POST only.",
-        };
-        this.audit.append({
-          tool,
-          cred_id: cred.id,
-          ticket: "-",
-          decision: "denied",
-          http_status: null,
-          detail: `method ${String(args.method)} rejected`,
-        });
-        this.modelTrace.push({ tool, result });
-        return result;
-      }
-      if (cred.kind !== "static_key") {
-        return { ok: false, error: "missing_cred" };
-      }
-      const locked = resolveSameOriginUrl(cred.base_url, String(args.path ?? ""));
-      if (!locked.ok) {
-        this.audit.append({
-          tool,
-          cred_id: cred.id,
-          ticket: "-",
-          decision: "denied",
-          http_status: null,
-          detail: locked.message,
-        });
-        const result: ToolResult = { ok: false, error: "origin_denied", message: locked.message };
-        this.modelTrace.push({ tool, result });
-        return result;
-      }
+    const intent = buildIntent(tool, args, cred);
+    if ("error" in intent) {
+      this.audit.append({
+        tool,
+        cred_id: cred.id,
+        ticket: "-",
+        decision: "denied",
+        http_status: null,
+        detail: intent.message,
+      });
+      const result: ToolResult = { ok: false, error: intent.error, message: intent.message };
+      this.modelTrace.push({ tool, result });
+      return result;
     }
 
-    const method =
-      tool === "static.request" ? parseStaticMethod(args.method) ?? undefined : undefined;
-    let grant = this.grants.find(this.sessionId, tool, cred.id, method);
+    let grant = this.grants.find(this.sessionId, intent);
     let decision: "allow_once" | "allow_session" | null = grant
       ? grant.mode === "once"
         ? "allow_once"
@@ -161,8 +151,10 @@ export class BrokerRuntime {
         credNickname: cred.nickname,
         credId: cred.id,
         preview,
-        risk: riskFor(tool, method),
+        risk: riskFor(tool, intent.method),
         createdAt: Date.now(),
+        fingerprint: intent.fingerprint,
+        origin: intent.origin,
       };
       const choice = await this.withTimeout(this.hooks.requestConsent(req), CONSENT_TIMEOUT_MS);
       if (choice === "timeout") {
@@ -191,19 +183,27 @@ export class BrokerRuntime {
         this.modelTrace.push({ tool, result });
         return result;
       }
-      const write = !isReadTool(tool, method);
+      const write = !isReadTool(tool, intent.method);
       const mode = write || choice === "allow_once" ? "once" : "session";
       grant = this.grants.create({
         sessionId: this.sessionId,
         credId: cred.id,
         tool,
         mode,
-        method,
+        method: intent.method,
+        origin: intent.origin,
+        fingerprint: intent.fingerprint,
       });
       decision = mode === "once" ? "allow_once" : "allow_session";
     }
 
-    const ticket = this.grants.issueTicket(grant, tool);
+    const issued = this.grants.issueTicket(grant, intent);
+    const ticket = this.grants.takeTicket(issued.id, intent);
+    if (!ticket) {
+      const result: ToolResult = { ok: false, error: "ticket_invalid", message: "Ticket failed re-verification." };
+      this.modelTrace.push({ tool, result });
+      return result;
+    }
     this.grants.consume(grant);
 
     const executed = await this.execute(tool, args, true);

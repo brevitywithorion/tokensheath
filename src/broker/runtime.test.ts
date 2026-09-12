@@ -97,3 +97,28 @@ test("session read grant skips a second consent; write still asks", async () => 
   assert.equal(d.ok, true);
   assert.equal(consents, 3);
 });
+
+test("unknown tool is default-deny before consent", async () => {
+  let consents = 0;
+  const { runtime } = setup(() => {
+    consents += 1;
+    return "allow_once";
+  });
+  const res = await runtime.invoke("shell.exec", { cmd: "cat ~/.tokensheath" });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.error, "unknown_tool");
+  assert.equal(consents, 0);
+});
+
+test("once grant does not cover a different request", async () => {
+  let consents = 0;
+  const { runtime } = setup(() => {
+    consents += 1;
+    return "allow_once";
+  });
+  const a = await runtime.invoke("static.request", { method: "GET", path: "/v1/balance" });
+  const b = await runtime.invoke("static.request", { method: "GET", path: "/v1/charges" });
+  assert.equal(a.ok, true);
+  assert.equal(b.ok, true);
+  assert.equal(consents, 2);
+});

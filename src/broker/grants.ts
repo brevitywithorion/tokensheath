@@ -1,33 +1,15 @@
 import { id } from "./ids.ts";
-import {
-  GITHUB_READ_TOOLS,
-  SESSION_CALLS,
-  SESSION_MS,
-  type Grant,
-  type Ticket,
-} from "./types.ts";
+import { grantCovers, isReadTool, ticketMatches, type RequestIntent } from "./policy.ts";
+import { SESSION_CALLS, SESSION_MS, type Grant, type Ticket } from "./types.ts";
 
-export function isReadTool(tool: string, method?: string): boolean {
-  if ((GITHUB_READ_TOOLS as readonly string[]).includes(tool)) return true;
-  if (tool === "static.request" && (method ?? "GET").toUpperCase() === "GET") return true;
-  return false;
-}
+export { isReadTool };
 
 export class GrantStore {
   grants: Grant[] = [];
   tickets: Ticket[] = [];
 
-  find(sessionId: string, tool: string, credId: string, method?: string): Grant | undefined {
-    const now = Date.now();
-    const read = isReadTool(tool, method);
-    return this.grants.find((g) => {
-      if (g.session_id !== sessionId) return false;
-      if (g.cred_id !== credId) return false;
-      if (g.expires_at <= now) return false;
-      if (g.calls_used >= g.max_calls) return false;
-      if (g.scope === "read") return read;
-      return g.tool === tool;
-    });
+  find(sessionId: string, intent: RequestIntent): Grant | undefined {
+    return this.grants.find((g) => g.session_id === sessionId && grantCovers(g, intent));
   }
 
   create(input: {
@@ -36,26 +18,44 @@ export class GrantStore {
     tool: string;
     mode: "once" | "session";
     method?: string;
+    origin: string;
+    fingerprint: string;
   }): Grant {
     const read = isReadTool(input.tool, input.method);
+    const session = input.mode === "session" && read;
     const grant: Grant = {
       id: id("grn"),
       cred_id: input.credId,
       tool: input.tool,
-      scope: input.mode === "session" && read ? "read" : "tool",
-      mode: input.mode,
+      scope: session ? "read" : "tool",
+      mode: session ? "session" : "once",
       expires_at: Date.now() + SESSION_MS,
-      max_calls: input.mode === "once" ? 1 : SESSION_CALLS,
+      max_calls: session ? SESSION_CALLS : 1,
       calls_used: 0,
       session_id: input.sessionId,
+      origin: input.origin,
+      fingerprint: session ? "" : input.fingerprint,
     };
     this.grants.push(grant);
     return grant;
   }
 
-  issueTicket(grant: Grant, tool: string): Ticket {
-    const ticket: Ticket = { id: id("tkt"), grant_id: grant.id, tool };
+  issueTicket(grant: Grant, intent: RequestIntent): Ticket {
+    const ticket: Ticket = {
+      id: id("tkt"),
+      grant_id: grant.id,
+      tool: intent.tool,
+      fingerprint: intent.fingerprint,
+      used: false,
+    };
     this.tickets.push(ticket);
+    return ticket;
+  }
+
+  takeTicket(ticketId: string, intent: RequestIntent): Ticket | undefined {
+    const ticket = this.tickets.find((t) => t.id === ticketId);
+    if (!ticket || !ticketMatches(ticket, intent)) return undefined;
+    ticket.used = true;
     return ticket;
   }
 

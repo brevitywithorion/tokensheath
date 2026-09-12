@@ -6,11 +6,15 @@ Local credential broker for agents. The agent requests an action. You approve it
 
 Need **Node.js 22+**. Windows, macOS, and Linux.
 
-## Threat model
+## Zero Trust
 
-TokenSheath protects **model context**. Tool args, tool results, and the audit log must not contain the key.
+- **Default deny.** Unknown tools never run. No credential moves without a grant.
+- **Verify every request.** Origin, method, and body are bound to the approval. Tickets are single-use.
+- **Least privilege.** Session reads: 15 min / 20 calls / this origin. Writes: once.
+- **Assume the agent is hostile.** It is untrusted. The key never enters model context.
 
-It does **not** protect a same-user process with a shell. Coding agents can read files. If they can open `~/.tokensheath`, they can read the store. That is documented, not a bug.
+This is not an OS sandbox. A same-user shell can still read `~/.tokensheath`.
+
 
 ## What it does
 
