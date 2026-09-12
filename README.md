@@ -24,25 +24,25 @@ This is not an OS sandbox. A same-user shell can still read `~/.tokensheath`.
 - **Revoke:** `sheath revoke --all` writes a watched epoch. A running `sheath mcp` drops live grants.
 - **Audit:** JSONL without secrets.
 
-## Try it (no Cursor)
+## Try it (Windows)
 
-```powershell
-git clone https://github.com/brevitywithorion/tokensheath.git
-cd tokensheath
-npm install
-node bin/sheath.mjs serve
-```
+Double-click **TokenSheath.cmd** in this folder. A window opens. Add Stripe, OpenAI, or a practice key.
 
-A window opens. Add a service (Stripe, OpenAI, or practice). Copy the Grok Build contract.
-
-Agents ping:
+Then ping (from an agent or Grok Build):
 
 ```
 POST http://127.0.0.1:8787/v1/request
-{ "method": "GET", "path": "/todos/1" }
+{ "service": "Stripe", "method": "GET", "path": "/v1/balance" }
 ```
 
 They receive JSON. They never receive the key. You still click Allow.
+
+Or from PowerShell:
+
+```powershell
+cd C:\Users\YOU\tokensheath
+.\TokenSheath.cmd
+```
 
 Paste [GROKBUILD-tokensheath.md](./GROKBUILD-tokensheath.md) into a Grok Build chat.
 

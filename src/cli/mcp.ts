@@ -51,6 +51,7 @@ export async function runMcp(): Promise<void> {
       inputSchema: {
         method: z.enum(["GET", "POST"]).optional(),
         path: z.string(),
+        service: z.string().optional(),
         query: z.record(z.string(), z.unknown()).optional(),
         json: z.unknown().optional(),
       },

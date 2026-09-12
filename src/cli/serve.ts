@@ -121,7 +121,7 @@ async function refresh() {
   const j = await r.json();
   const el = document.getElementById("status");
   if (!j.services || !j.services.length) el.textContent = "Nothing saved yet.";
-  else el.textContent = j.services.map((s) => s.nickname + " · " + (s.extra || "")).join("\\n");
+  else el.textContent = j.services.filter((s) => s.kind !== "oauth_github").map((s) => s.nickname + " · " + (s.extra || "")).join("\\n");
 }
 refresh();
 document.getElementById("save").onclick = async () => {
@@ -189,7 +189,7 @@ export async function runServe(port = SHEATH_PING_PORT): Promise<void> {
           send(res, 400, { ok: false, error: "missing_key", message: "Paste the secret here, not in the chat." });
           return;
         }
-        store.upsertStatic({
+        const saved = store.upsertStatic({
           nickname: (raw.nickname || preset?.nickname || "my service").trim(),
           header_name: preset?.header_name || "Authorization",
           header_template: preset?.header_template || "Bearer {{key}}",
@@ -197,16 +197,18 @@ export async function runServe(port = SHEATH_PING_PORT): Promise<void> {
           key,
         });
         await saveDiskStore(store);
-        send(res, 200, { ok: true, nickname: store.staticKey()?.nickname, origin: norm.url.origin });
+        send(res, 200, { ok: true, nickname: saved.nickname, origin: norm.url.origin });
         return;
       }
       if (incoming.method === "POST" && url.pathname === "/v1/request") {
         const raw = JSON.parse((await readBody(incoming)) || "{}") as {
+          service?: string;
           method?: string;
           path?: string;
           json?: unknown;
         };
         const result = await runtime.invoke("static.request", {
+          service: raw.service,
           method: raw.method ?? "GET",
           path: raw.path,
           json: raw.json,

@@ -12,6 +12,7 @@ import { requestConsentBrowser } from "./consent-server.ts";
 import { normalizeBaseUrl } from "../broker/origin.ts";
 import { runServe } from "./serve.ts";
 import { SHEATH_PING_PORT } from "../lib/grokbuild-contract.ts";
+import { missingCredMessage } from "../broker/store.ts";
 
 function usage(): string {
   return `TokenSheath — sheath the token, unsheath only to act.
@@ -109,17 +110,24 @@ function parseJsonFlag(argv: string[]): unknown {
   return JSON.parse(raw);
 }
 
+function parseNamed(argv: string[], flag: string): string | undefined {
+  const i = argv.indexOf(flag);
+  if (i === -1) return undefined;
+  return argv[i + 1];
+}
+
 async function call(argv: string[]): Promise<void> {
   const method = (argv[0] ?? "GET").toUpperCase();
   const path = argv[1];
   if (!path || !path.startsWith("/")) {
-    process.stderr.write("Usage: sheath call GET /todos/1\n");
+    process.stderr.write("Usage: sheath call GET /todos/1 [--service Name]\n");
     process.exit(1);
   }
   const json = parseJsonFlag(argv);
+  const service = parseNamed(argv, "--service");
   const store = await loadDiskStore();
-  if (!store.staticKey()) {
-    process.stderr.write("No saved service. Run: node bin/sheath.mjs onboard\n");
+  if (!store.staticKey(service)) {
+    process.stderr.write(`${missingCredMessage(store, "static.request", service)}\n`);
     process.exit(1);
   }
   const grants = new GrantStore();
@@ -137,7 +145,7 @@ async function call(argv: string[]): Promise<void> {
     },
   });
   process.stderr.write("Approval tab opening — Allow once.\n");
-  const result = await runtime.invoke("static.request", { method, path, json });
+  const result = await runtime.invoke("static.request", { method, path, json, service });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 

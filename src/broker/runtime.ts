@@ -7,13 +7,14 @@ import { buildIntent, knownTool } from "./policy.ts";
 import { containsSecret, redact } from "./redact.ts";
 import { riskFor } from "./risk.ts";
 import { REDIRECT_DENIED } from "./http.ts";
-import { credForTool, type MemoryStore } from "./store.ts";
+import { credForTool, missingCredMessage, type MemoryStore } from "./store.ts";
 import {
   CONSENT_TIMEOUT_MS,
   TOOL_LABELS,
   type ConsentChoice,
   type ConsentPreview,
   type ConsentRequest,
+  type Credential,
   type ToolResult,
 } from "./types.ts";
 import { id } from "./ids.ts";
@@ -99,7 +100,8 @@ export class BrokerRuntime {
       return result;
     }
 
-    const cred = credForTool(this.store, tool);
+    const service = typeof args.service === "string" ? args.service : undefined;
+    const cred = credForTool(this.store, tool, service);
     if (!cred) {
       this.audit.append({
         tool,
@@ -107,12 +109,12 @@ export class BrokerRuntime {
         ticket: "-",
         decision: "denied",
         http_status: null,
-        detail: "missing credential — run onboard",
+        detail: missingCredMessage(this.store, tool, service),
       });
       const result: ToolResult = {
         ok: false,
         error: "missing_cred",
-        message: "No matching credential. Run broker onboard.",
+        message: missingCredMessage(this.store, tool, service),
       };
       this.modelTrace.push({ tool, result });
       return result;
@@ -206,7 +208,7 @@ export class BrokerRuntime {
     }
     this.grants.consume(grant);
 
-    const executed = await this.execute(tool, args, true);
+    const executed = await this.execute(tool, args, true, cred);
     if (executed.redirectDenied) {
       this.audit.append({
         tool,
@@ -236,7 +238,8 @@ export class BrokerRuntime {
         this.modelTrace.push({ tool, ticket: ticket.id, result });
         return result;
       }
-      const retried = await this.execute(tool, args, false);
+      const fresh = this.store.github() ?? cred;
+      const retried = await this.execute(tool, args, false, fresh);
       if (retried.redirectDenied) {
         const result: ToolResult = { ok: false, error: "redirect_denied", message: REDIRECT_DENIED };
         this.modelTrace.push({ tool, ticket: ticket.id, result });
@@ -302,6 +305,7 @@ export class BrokerRuntime {
     tool: string,
     args: Record<string, unknown>,
     allowRetryFlag: boolean,
+    cred: Credential,
   ): Promise<{
     status: number;
     data: unknown;
@@ -310,7 +314,7 @@ export class BrokerRuntime {
     redirectDenied?: boolean;
   }> {
     if (tool.startsWith("github.")) {
-      const token = this.store.github()?.access_token ?? "";
+      const token = cred.kind === "oauth_github" ? cred.access_token : "";
       if (tool === "github.notifications.list") {
         const per_page = capPerPage(args.per_page, 50, 20);
         const res = await githubRequest({
@@ -365,8 +369,9 @@ export class BrokerRuntime {
       }
     }
     if (tool === "static.request") {
-      const cred = this.store.staticKey();
-      if (!cred) return { status: 0, data: { error: "missing" }, detail: "missing", retryAuth: false };
+      if (cred.kind !== "static_key") {
+        return { status: 0, data: { error: "missing" }, detail: "missing", retryAuth: false };
+      }
       const method = parseStaticMethod(args.method) ?? "GET";
       const path = String(args.path ?? "");
       const out = await staticRequest({

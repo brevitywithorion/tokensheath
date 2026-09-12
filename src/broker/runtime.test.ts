@@ -122,3 +122,28 @@ test("once grant does not cover a different request", async () => {
   assert.equal(b.ok, true);
   assert.equal(consents, 2);
 });
+
+test("named service is required when two keys are saved", async () => {
+  let consents = 0;
+  const { runtime, store } = setup(() => {
+    consents += 1;
+    return "allow_once";
+  });
+  store.upsertStatic({
+    nickname: "OpenAI",
+    header_name: "Authorization",
+    header_template: "Bearer {{key}}",
+    base_url: "https://api.openai.com",
+    key: "sk-demo",
+  });
+  const none = await runtime.invoke("static.request", { method: "GET", path: "/v1/balance" });
+  assert.equal(none.ok, false);
+  if (!none.ok) assert.equal(none.error, "missing_cred");
+  const byName = await runtime.invoke("static.request", {
+    method: "GET",
+    path: "/v1/balance",
+    service: "stripe test",
+  });
+  assert.equal(byName.ok, true);
+  assert.equal(consents, 1);
+});

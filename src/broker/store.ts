@@ -28,8 +28,21 @@ export class MemoryStore {
     return this.store.creds.find((c): c is GithubCredential => c.kind === "oauth_github");
   }
 
-  staticKey(): StaticCredential | undefined {
-    return this.store.creds.find((c): c is StaticCredential => c.kind === "static_key");
+  staticKeys(): StaticCredential[] {
+    return this.store.creds.filter((c): c is StaticCredential => c.kind === "static_key");
+  }
+
+  staticKey(name?: string): StaticCredential | undefined {
+    const all = this.staticKeys();
+    if (name && name.trim()) {
+      const n = name.trim().toLowerCase();
+      return all.find((c) => c.nickname.toLowerCase() === n || c.id === name.trim());
+    }
+    return all.length === 1 ? all[0] : undefined;
+  }
+
+  byId(id: string): Credential | undefined {
+    return this.store.creds.find((c) => c.id === id);
   }
 
   publicCreds(): { id: string; kind: string; nickname: string; extra: string }[] {
@@ -58,18 +71,21 @@ export class MemoryStore {
   }
 
   upsertStatic(input: Omit<StaticCredential, "id" | "kind" | "created_at"> & { id?: string }): StaticCredential {
-    const existing = this.staticKey();
+    const nickname = input.nickname.trim() || "my service";
+    const existing =
+      (input.id ? this.staticKeys().find((c) => c.id === input.id) : undefined) ??
+      this.staticKeys().find((c) => c.nickname.toLowerCase() === nickname.toLowerCase());
     const cred: StaticCredential = {
       id: input.id ?? existing?.id ?? id("crd"),
       kind: "static_key",
-      nickname: input.nickname,
+      nickname,
       header_name: input.header_name || "Authorization",
       header_template: input.header_template || "Bearer {{key}}",
       base_url: input.base_url,
       key: input.key,
       created_at: existing?.created_at ?? new Date().toISOString(),
     };
-    this.store.creds = this.store.creds.filter((c) => c.kind !== "static_key");
+    this.store.creds = this.store.creds.filter((c) => !(c.kind === "static_key" && c.id === cred.id));
     this.store.creds.push(cred);
     return cred;
   }
@@ -100,8 +116,22 @@ export function applyHeaderTemplate(template: string, key: string): string {
   return template.replaceAll("{{key}}", key);
 }
 
-export function credForTool(store: MemoryStore, tool: string): Credential | undefined {
+export function credForTool(
+  store: MemoryStore,
+  tool: string,
+  service?: string,
+): Credential | undefined {
   if (tool.startsWith("github.")) return store.github();
-  if (tool === "static.request") return store.staticKey();
+  if (tool === "static.request") return store.staticKey(service);
   return undefined;
+}
+
+export function missingCredMessage(store: MemoryStore, tool: string, service?: string): string {
+  if (tool === "static.request") {
+    const names = store.staticKeys().map((c) => c.nickname);
+    if (!names.length) return "No saved service. Open TokenSheath and add one.";
+    if (service) return `No service named "${service}". Saved: ${names.join(", ")}.`;
+    if (names.length > 1) return `Say which service: ${names.join(", ")}.`;
+  }
+  return "No matching credential. Open TokenSheath and add one.";
 }

@@ -17,15 +17,19 @@ When the app runs **on the user's machine**:
 
 \`\`\`json
 {
+  "service": "Stripe",
   "method": "GET",
   "path": "/v1/balance"
 }
 \`\`\`
 
+\`service\` is the nickname saved in TokenSheath. If only one service is saved, you may omit it.
+
 POST with a body:
 
 \`\`\`json
 {
+  "service": "Stripe",
   "method": "POST",
   "path": "/v1/charges",
   "json": { "amount": 2000, "currency": "usd" }
